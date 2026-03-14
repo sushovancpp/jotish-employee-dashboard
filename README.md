@@ -1,49 +1,145 @@
-# JOTISH Employee Insights Dashboard
+# Jotish — Employee Insights Dashboard
 
-> Next-generation workforce intelligence platform. React 18 · React Router v6 · Tailwind CSS · Leaflet · Zero UI Libraries.
+A full-stack React application built as part of a frontend engineering assessment. The dashboard provides secure authentication, a high-performance virtualized employee grid, identity verification with camera and signature capture, and geospatial salary analytics — all without any UI component libraries.
 
 ---
 
-## Quick Start
+## Tech Stack
+
+| Concern | Choice |
+|---|---|
+| Framework | React 18 |
+| Routing | React Router v6 |
+| Styling | Tailwind CSS + inline styles |
+| Map | Leaflet |
+| Build Tool | Vite |
+| **Banned** | MUI, Ant Design, Bootstrap, react-window, react-virtualized, Chart.js, D3 |
+
+---
+
+## Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/sushovancpp/jotish-employee-dashboard.git
+cd jotish-employee-dashboard
+```
+
+### 2. Install dependencies
 
 ```bash
 npm install
-npm run dev       # → http://localhost:5173
 ```
 
-Login credentials: **testuser / Test123**
+### 3. Create environment file
+
+Create a `.env` file in the root of the project with the following variables:
+
+```
+VITE_API_USERNAME=test
+VITE_API_PASSWORD=123456
+VITE_LOGIN_USERNAME=testuser
+VITE_LOGIN_PASSWORD=Test123
+```
+
+> The `.env` file is excluded from version control via `.gitignore`. Never commit credentials to Git.
+
+### 4. Start the development server
+
+```bash
+npm run dev
+```
+
+Visit `http://localhost:5173` in your browser.
 
 ---
 
-## ⚠️ Intentional Bug — Documentation
+## Project Structure
 
-**Location:** `src/components/VirtualList.jsx` — the second `useEffect` (scroll listener).
+```
+src/
+├── context/
+│   └── AuthContext.jsx      # Persistent auth via Context API + localStorage
+├── pages/
+│   ├── Login.jsx            # Screen 1 — authentication
+│   ├── List.jsx             # Screen 2 — virtualized employee grid
+│   ├── Details.jsx          # Screen 3 — camera + signature + blob merge
+│   └── Analytics.jsx        # Screen 4 — SVG chart + Leaflet map
+├── components/
+│   ├── ProtectedRoute.jsx   # Auth guard with redirect preservation
+│   ├── VirtualList.jsx      # Custom scroll virtualization
+│   └── SVGChart.jsx         # Raw SVG bar chart
+└── hooks/
+    └── useEmployeeData.js   # API fetch hook with request cancellation
+```
 
-**What it is:** A **stale-reference memory leak** caused by passing a new anonymous function to `removeEventListener` instead of the original `handleScroll` reference.
+---
+
+## Features
+
+### A. Secure Authentication
+- Credentials are loaded from environment variables, never hardcoded in source.
+- Session persists across page refreshes via `localStorage`.
+- Unauthenticated users navigating to `/list` or `/details/:id` are redirected to login.
+- After login, users are forwarded to their originally intended route.
+
+### B. High-Performance Virtualized Grid
+- Fetches employee data from a POST API endpoint.
+- Supports real-time search across name, email, city, and department.
+- Supports multi-field sorting (name, city, salary, department).
+- Custom scroll virtualization — only visible rows are rendered in the DOM at any time.
+
+### C. Identity Verification
+- Dynamic routing via `/details/:id`.
+- Live camera feed using the browser's `getUserMedia` API.
+- Freehand signature drawn directly on an HTML5 Canvas overlaid on the captured photo.
+- Photo and signature are merged into a single PNG file using the Canvas 2D compositing API and exported as a Blob.
+
+### D. Analytics
+- KPI cards: headcount, average salary, median, total payout.
+- Custom SVG bar chart showing average salary per city — built with raw `<rect>`, `<text>`, and `<line>` elements, no chart libraries.
+- Leaflet map with circle markers per city, sized proportionally to employee count.
+
+---
+
+## Environment Variables
+
+| Variable | Purpose |
+|---|---|
+| `VITE_API_USERNAME` | Username sent to the employee data API |
+| `VITE_API_PASSWORD` | Password sent to the employee data API |
+| `VITE_LOGIN_USERNAME` | Valid username for the dashboard login screen |
+| `VITE_LOGIN_PASSWORD` | Valid password for the dashboard login screen |
+
+All variables must be prefixed with `VITE_` for Vite to expose them to the frontend via `import.meta.env`.
+
+---
+
+##  Intentional Bug — Documentation
+
+**Location:** `src/components/VirtualList.jsx` — the `useEffect` that attaches the scroll listener.
+
+**What it is:** A stale-reference memory leak caused by passing a new anonymous function to `removeEventListener` instead of the original `handleScroll` reference.
 
 ```js
-// INSIDE THE EFFECT:
+// Listener is added with this reference:
 const handleScroll = () => { setScrollTop(el.scrollTop) }
 el.addEventListener('scroll', handleScroll, { passive: true })
 
-// IN THE CLEANUP — THE BUG:
+// Cleanup creates a BRAND NEW function — never matches handleScroll:
 return () => {
-  // ⚠ Creates a NEW arrow function on every call.
-  // removeEventListener compares by reference, so the original
-  // handleScroll is NEVER unregistered.
   el.removeEventListener('scroll', () => {
     setScrollTop(el.scrollTop)
   })
 }
 ```
 
-**Why it's a problem:**
-- `EventTarget.removeEventListener` uses *reference equality* to find the listener to remove.
-- A freshly-created `() => {}` never equals the previously-added `handleScroll`.
-- Every time `VirtualList` mounts, a new listener stacks on the DOM node.
-- After navigation away and back, you get 2, 4, 8… duplicate scroll handlers firing `setScrollTop`, each triggering a re-render — a classic **memory leak + ghost state-update** combo.
+**Why it is a problem:**
 
-**Correct fix:**
+`EventTarget.removeEventListener` uses reference equality to locate the listener to remove. Since the cleanup passes a freshly created arrow function every time, it never matches the originally registered `handleScroll`. Every mount cycle stacks another orphaned listener on the DOM node. After navigating away and back multiple times, duplicate scroll handlers accumulate — each one calling `setScrollTop` and triggering an unnecessary re-render. This is a classic memory leak combined with ghost state updates after unmount.
+
+**The correct fix:**
 
 ```js
 useEffect(() => {
@@ -51,12 +147,13 @@ useEffect(() => {
   if (!el) return
   const handleScroll = () => setScrollTop(el.scrollTop)
   el.addEventListener('scroll', handleScroll, { passive: true })
-  return () => el.removeEventListener('scroll', handleScroll) // same ref ✓
+  return () => el.removeEventListener('scroll', handleScroll)
 }, [])
 ```
 
-**Why I chose this bug:**
-It is realistic (a common copy-paste mistake), subtle enough to pass code review at first glance, and has a measurable effect that can be demonstrated with Chrome DevTools Memory > Heap snapshot — exactly the kind of bug a senior interviewer would look for.
+**Why this bug was chosen:**
+
+It is a realistic copy-paste mistake that is subtle enough to survive a code review at first glance, yet produces a measurable effect that can be demonstrated using Chrome DevTools — Memory tab → Heap snapshot, or Performance tab → Event Listeners panel showing stacked scroll handlers.
 
 ---
 
@@ -69,99 +166,65 @@ It is realistic (a common copy-paste mistake), subtle enough to pass code review
 | Symbol | Value | Meaning |
 |---|---|---|
 | `ROW_HEIGHT` | `56 px` | Fixed pixel height of every row |
-| `BUFFER` | `8` | Extra rows rendered above **and** below the visible range |
+| `BUFFER` | `8` | Extra rows rendered above and below the visible range |
 
 ### Formulas
 
 ```
-scrollTop  = el.scrollTop           (from scroll event — pixels from top of container)
-viewHeight = ResizeObserver height  (measured height of the scrollable container)
-N          = data.length            (total row count)
+scrollTop   = el.scrollTop            pixels scrolled from top of container
+viewHeight  = ResizeObserver height   measured height of the scrollable container
+N           = data.length             total row count
 
-startIndex = max(0,  floor(scrollTop / ROW_HEIGHT) - BUFFER)
-endIndex   = min(N,  floor((scrollTop + viewHeight) / ROW_HEIGHT) + BUFFER)
+startIndex  = max(0,  floor(scrollTop / ROW_HEIGHT) - BUFFER)
+endIndex    = min(N,  floor((scrollTop + viewHeight) / ROW_HEIGHT) + BUFFER)
 
-totalHeight = N × ROW_HEIGHT        → height of the invisible spacer <div>
+totalHeight = N x ROW_HEIGHT          height of the invisible spacer div
                                        that gives the scrollbar its correct range
 
-offsetY     = startIndex × ROW_HEIGHT → translateY of the rendered batch,
-                                         so rows land at the exact pixel position
-                                         they would occupy in a fully-rendered list
+offsetY     = startIndex x ROW_HEIGHT position of the rendered batch so rows
+                                       land at their exact pixel position
 ```
 
-### Why it works
+### How it works
 
-1. A single `<div>` with `height = totalHeight` is rendered inside the scroll container. This gives the browser the correct scrollbar height for the *entire* dataset without actually rendering all rows.
-2. Only `endIndex − startIndex` rows (~20 for a 1080 px viewport at 56 px/row) are in the DOM.
-3. Those rows are `position: absolute; top: offsetY` so they land at precisely the right visual position regardless of which slice is currently visible.
-4. The BUFFER prevents pop-in: 8 extra rows above and below ensure rows are already rendered before they scroll into view.
-
-### Complexity
+A single spacer div with `height = totalHeight` establishes the full scrollbar range without rendering every row. Only the rows between `startIndex` and `endIndex` (~20 rows for a 1080px viewport) are mounted in the DOM at any time. These rows are `position: absolute; top: offsetY` so they appear at exactly the right position. The BUFFER of 8 rows above and below the viewport prevents visible pop-in during fast scrolling.
 
 | Operation | Complexity |
 |---|---|
-| Row render on scroll | O(1) — always renders the same fixed-size window |
-| Full sort + filter | O(N log N) — but memoized with `useMemo` |
-| Memory footprint | O(BUFFER × 2 + viewHeight/ROW_HEIGHT) DOM nodes |
+| Row render on scroll | O(1) — fixed window size regardless of dataset |
+| Sort and filter | O(N log N) — memoized with `useMemo` |
+| DOM nodes in memory | O(BUFFER x 2 + viewHeight / ROW_HEIGHT) |
 
 ---
 
-## Architecture Overview
-
-```
-src/
-├── context/
-│   └── AuthContext.jsx      # Persistent auth (localStorage) via Context API
-├── pages/
-│   ├── Login.jsx            # Screen 1 — authentication
-│   ├── List.jsx             # Screen 2 — virtualized employee grid
-│   ├── Details.jsx          # Screen 3 — camera + signature + blob merge
-│   └── Analytics.jsx        # Screen 4 — SVG chart + Leaflet map
-├── components/
-│   ├── ProtectedRoute.jsx   # Auth guard with redirect preservation
-│   ├── VirtualList.jsx      # Custom scroll virtualization ← INTENTIONAL BUG HERE
-│   └── SVGChart.jsx         # Raw SVG bar chart (no Chart.js / D3)
-└── hooks/
-    └── useEmployeeData.js   # API fetch hook with cancellation
-```
-
----
-
-## Identity Verification — Image Merging Explained
+## Image Merging — How It Works
 
 **File:** `src/pages/Details.jsx` → `mergeAndSave()`
 
-1. **Capture:** `videoRef` streams the webcam via `getUserMedia`. On "Capture", the current frame is drawn to `photoRef` (an HTML canvas) via `ctx.drawImage(video, 0, 0, W, H)`.
+1. **Capture** — `getUserMedia({ video: true })` streams the webcam into a `<video>` element. On capture, `ctx.drawImage(video, 0, 0, W, H)` freezes the current frame onto `photoCanvas`.
 
-2. **Signature:** A transparent `sigRef` canvas is layered absolutely over the photo canvas (same dimensions). Mouse/touch events draw `bezierCurveTo` strokes using `context2d` — the canvas background remains transparent so the photo shows through.
+2. **Signature** — A transparent `sigCanvas` is absolutely positioned over `photoCanvas` at identical dimensions. Mouse and touch events draw freehand strokes using the Canvas 2D path API with `lineCap: round` for smooth lines.
 
-3. **Merge:**
+3. **Merge** — An offscreen canvas composites both layers:
    ```js
-   const merge = document.createElement('canvas')   // offscreen
-   merge.width = W; merge.height = H
-   const ctx = merge.getContext('2d')
-   ctx.drawImage(photoCanvas, 0, 0, W, H)           // Layer 1: photo
+   ctx.drawImage(photoCanvas, 0, 0, W, H)         // Layer 1: photo
    ctx.globalCompositeOperation = 'source-over'
-   ctx.drawImage(sigCanvas,   0, 0, W, H)           // Layer 2: signature
+   ctx.drawImage(sigCanvas, 0, 0, W, H)            // Layer 2: signature
    ```
-   The `source-over` composite places the signature on top while transparent signature pixels reveal the photo underneath.
+   `source-over` places the signature on top while transparent pixels in the signature canvas show the photo beneath.
 
-4. **Export:** `merge.toBlob(blob => URL.createObjectURL(blob), 'image/png')` produces a Blob → Object URL rendered in `<img>` and offered as a `<a download>` link.
+4. **Export** — `canvas.toBlob()` produces a binary Blob which is converted to an Object URL via `URL.createObjectURL()`. This is rendered in an `<img>` tag and offered as a PNG download.
 
 ---
 
 ## Geospatial Mapping — City Coordinate Strategy
 
-**File:** `src/pages/Analytics.jsx` → `CITY_COORDS` + `resolveCoords()`
+**File:** `src/pages/Analytics.jsx`
 
-Since the API dataset is India-scoped, we use a **static lookup table** of ~35 major Indian cities mapping `city_name → [lat, lng]`.
+A static lookup table maps city names to `[latitude, longitude]` coordinates. On render, each unique city from the dataset is resolved using:
 
-Resolution algorithm:
 1. Exact match (case-insensitive).
-2. Partial substring match (handles "New Delhi" → "delhi").
-3. Fallback: India geographic centroid (20.59°N, 78.96°E) with ±2° random jitter so unknown cities don't stack on the same pixel.
+2. Partial substring match — handles variations like `"New Delhi"` matching `"delhi"`.
+3. Fallback to a geographic centroid with random jitter so unmatched cities do not stack on the same point.
 
-Leaflet renders circle markers sized proportionally to employee count (`radius = clamp(count × 2.5, 8, 30)`).
-
----
-
+Leaflet renders a `circleMarker` per city with radius proportional to employee count (`clamp(count x 2.5, 8, 30)`). The CartoDB dark tile layer is used to match the dashboard's dark theme.
