@@ -13,7 +13,6 @@ A full-stack React application built as part of a frontend engineering assessmen
 | Styling | Tailwind CSS + inline styles |
 | Map | Leaflet |
 | Build Tool | Vite |
-| **Banned** | MUI, Ant Design, Bootstrap, react-window, react-virtualized, Chart.js, D3 |
 
 ---
 
