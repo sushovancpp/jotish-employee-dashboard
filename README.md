@@ -1,4 +1,4 @@
-# EID — Employee Insights Dashboard
+# JOTISH Employee Insights Dashboard
 
 > Next-generation workforce intelligence platform. React 18 · React Router v6 · Tailwind CSS · Leaflet · Zero UI Libraries.
 
@@ -165,13 +165,3 @@ Leaflet renders circle markers sized proportionally to employee count (`radius =
 
 ---
 
-## Tech Stack
-
-| Concern | Choice | Why |
-|---|---|---|
-| Framework | React 18 | Concurrent rendering, hooks |
-| Routing | React Router v6 | Nested routes, loader API |
-| Styling | Tailwind CSS + inline | Zero-runtime, design-system tokens |
-| Map | Leaflet | Explicitly permitted; MIT license |
-| Build | Vite | Sub-second HMR |
-| **Banned** | MUI, Ant Design, Bootstrap, react-window, react-virtualized, Chart.js, D3 | Per spec |
